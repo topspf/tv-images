@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 W, H = 1920, 1080
 TOP, BOTTOM = 190, 150  # header band, clock band
-SCALE = 0.8
+SCALE = 0.55  # schedule width as a share of the frame
 
 sched_path, out_path = sys.argv[1], sys.argv[2]
 bg_path = sys.argv[3] if len(sys.argv) > 3 else None
@@ -52,17 +52,22 @@ if bg_path:
     bg = Image.open(bg_path).convert("RGB")
     s = max(W / bg.width, H / bg.height)
     bg = bg.resize((round(bg.width * s), round(bg.height * s)), Image.LANCZOS)
-    l, t = (bg.width - W) // 2, (bg.height - H) // 2
+    l, t = (bg.width - W) // 2, int((bg.height - H) * 0.3)  # keep more wall than plaza
     frame = bg.crop((l, t, l + W, t + H))
 else:
     frame = stone_wall()
 
 frame = frame.convert("RGBA")
-# dark translucent bands so white header/clock text stays readable
-bands = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-d = ImageDraw.Draw(bands)
-d.rectangle([0, 0, W, TOP], fill=(20, 16, 10, 150))
-d.rectangle([0, H - BOTTOM, W, H], fill=(20, 16, 10, 150))
+# dark gradients behind the header and clock so white text stays readable
+alpha = np.zeros(H, np.float32)
+alpha[:TOP] = 175
+alpha[TOP:TOP + 70] = np.linspace(175, 0, 70)
+alpha[H - BOTTOM:] = 175
+alpha[H - BOTTOM - 70:H - BOTTOM] = np.linspace(0, 175, 70)
+band = np.zeros((H, W, 4), np.uint8)
+band[..., :3] = (20, 16, 10)
+band[..., 3] = alpha[:, None].astype(np.uint8)
+bands = Image.fromarray(band, "RGBA")
 frame = Image.alpha_composite(frame, bands)
 
 sched = Image.open(sched_path).convert("RGBA")
